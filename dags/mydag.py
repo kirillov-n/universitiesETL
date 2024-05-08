@@ -1,14 +1,13 @@
 import pendulum
 import requests
-import pandas as pd
-from typing import List
+import logging
 
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 
 @dag(
-    schedule_interval="0 3 * * *",
+    schedule="0 3 * * *",
     start_date=pendulum.datetime(2024, 5, 7, tz="Europe/Moscow"),
     catchup=False,
     tags=["universities"],
@@ -26,35 +25,59 @@ def universities_data():
     
     @task()
     def extract():
-        url = 'http://universities.hipolabs.com/search?limit=30'
+        url = 'http://universities.hipolabs.com/search'
         request = requests.get(url)
         request.raise_for_status()
         return request.json()
 
     @task()
-    def transform(data):
+    def transform(data, existing_records):
+        import pandas as pd
         df = pd.DataFrame(data).drop(['web_pages', 'domains'], axis=1)
+        # Исключаем уже существующие записи
+        df = df[~df[['name']].apply(tuple, axis=1).isin(existing_records)]
+        if df.empty:
+            return df
         df.rename(columns={"state-province": "state_province"})
+        '''
+        Ищем заведения с ключевыми словами в названии для определения типа заведения: Колледж, университет или институт
+        Поиск по ключевым словам ведется на 4 самых популярных языках
+        '''
+        # На английском языке
         df.loc[df['name'].str.contains(r'College', case=False), 'type'] = 'College'
         df.loc[df['name'].str.contains(r'University', case=False), 'type'] = 'University'
         df.loc[df['name'].str.contains(r'Institute', case=False), 'type'] = 'Institute'
+
+        # На испанском языке
+        df.loc[df['name'].str.contains(r'Сolegio', case=False), 'type'] = 'College'
+        df.loc[df['name'].str.contains(r'Universidad', case=False), 'type'] = 'University'
+        df.loc[df['name'].str.contains(r'Instituto', case=False), 'type'] = 'Institute'
+
+        # На немецком языке
+        df.loc[df['name'].str.contains(r'Hochschule', case=False), 'type'] = 'College'
+        df.loc[df['name'].str.contains(r'Universität', case=False), 'type'] = 'University'
+        df.loc[df['name'].str.contains(r'Institut', case=False), 'type'] = 'Institute'
+
+        # На французском языке
+        df.loc[df['name'].str.contains(r'Collège', case=False), 'type'] = 'College'
+        df.loc[df['name'].str.contains(r'Université', case=False), 'type'] = 'University'
+        df.loc[df['name'].str.contains(r'Institut', case=False), 'type'] = 'Institute'
         return df
 
     @task()
-    def load(data, existing_records):
-        # Фильтрация данных: исключаем уже существующие записи
-        new_data = data[~data[['name']].apply(tuple, axis=1).isin(existing_records)]
-        if new_data.empty:
-            print("Нет новых записей для загрузки.")
+    def load(data):
+        if data.empty:
+            logging.info("Нет новых записей для загрузки")
             return
         # Загрузка новых записей в базу данных
         target_fields = ["state_province", "name", "alpha_two_code", "country", "type"]
-        PostgresHook(postgres_conn_id='postgres').insert_rows('universities', new_data.values, target_fields=target_fields)
+        PostgresHook(postgres_conn_id='postgres').insert_rows('universities', data.values, target_fields=target_fields)
+        logging.info("Данные успешно загружены")
 
     check_existing = check_existing_records()
     extracted_data = extract()
-    transformed_data = transform(extracted_data)
-    load(transformed_data, check_existing)
+    transformed_data = transform(extracted_data, check_existing)
+    load(transformed_data)
 
 
 universities_data()
