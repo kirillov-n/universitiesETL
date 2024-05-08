@@ -56,7 +56,9 @@ x-airflow-common:
     AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__ENABLE_XCOM_PICKLING: 'true'
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: 'Europe/Moscow'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
   volumes:
@@ -102,7 +104,6 @@ services:
     command: webserver
     environment:
       <<: *airflow-common-env
-      AIRFLOW__CORE__ENABLE_XCOM_PICKLING: 'True'
     ports:
       - 8080:8080
     healthcheck:
@@ -145,7 +146,6 @@ services:
       # Required to handle warm shutdown of the celery workers properly
       # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
       DUMB_INIT_SETSID: "0"
-      AIRFLOW__CORE__ENABLE_XCOM_PICKLING: 'True'
     restart: always
     depends_on:
       <<: *airflow-common-depends-on

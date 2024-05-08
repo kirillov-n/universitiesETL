@@ -8,15 +8,25 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 
 @dag(
-    schedule=None,
-    start_date=pendulum.datetime(2024, 5, 7, tz="UTC"),
+    schedule_interval="0 3 * * *",
+    start_date=pendulum.datetime(2024, 5, 7, tz="Europe/Moscow"),
     catchup=False,
     tags=["universities"],
 )
 def universities_data():
     @task()
+    def check_existing_records():
+        conn = PostgresHook(postgres_conn_id='postgres').get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT name FROM universities")
+        existing_records = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return existing_records
+    
+    @task()
     def extract():
-        url = 'http://universities.hipolabs.com/search?limit=10'
+        url = 'http://universities.hipolabs.com/search?limit=30'
         request = requests.get(url)
         request.raise_for_status()
         return request.json()
@@ -31,13 +41,20 @@ def universities_data():
         return df
 
     @task()
-    def load(data):
+    def load(data, existing_records):
+        # Фильтрация данных: исключаем уже существующие записи
+        new_data = data[~data[['name']].apply(tuple, axis=1).isin(existing_records)]
+        if new_data.empty:
+            print("Нет новых записей для загрузки.")
+            return
+        # Загрузка новых записей в базу данных
         target_fields = ["state_province", "name", "alpha_two_code", "country", "type"]
-        PostgresHook(postgres_conn_id='postgres').insert_rows('universities', data.values, target_fields = target_fields)
+        PostgresHook(postgres_conn_id='postgres').insert_rows('universities', new_data.values, target_fields=target_fields)
 
+    check_existing = check_existing_records()
     extracted_data = extract()
     transformed_data = transform(extracted_data)
-    load(transformed_data)
+    load(transformed_data, check_existing)
 
 
 universities_data()
