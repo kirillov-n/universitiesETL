@@ -17,8 +17,8 @@
 
 Авторизироваться и создать соединение Admin -> Connections:
     
-    connection id: postgres <br />
-    connection type: Postgres <br />
-    host: postgres <br />
-    login: <ИМЯ_ПОЛЬЗОВАТЕЛЯ> <br />
+    connection id: postgres
+    connection type: Postgres
+    host: postgres
+    login: <ИМЯ_ПОЛЬЗОВАТЕЛЯ>
     port: 5432
