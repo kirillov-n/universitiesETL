@@ -1,6 +1,7 @@
 import pendulum
 import requests
 import logging
+from typing import List, Dict, Any, Tuple, NoReturn
 
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
@@ -13,8 +14,10 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
     tags=["universities"],
 )
 def universities_data():
+    import pandas as pd
+    
     @task()
-    def check_existing_records():
+    def check_existing_records() -> List[Tuple[str]]:
         conn = PostgresHook(postgres_conn_id="postgres").get_conn()
         cursor = conn.cursor()
         # Проверяем наличие таблицы universities
@@ -41,15 +44,14 @@ def universities_data():
         return existing_records
     
     @task()
-    def extract():
+    def extract() -> List[Dict[str, Any]]:
         url = "http://universities.hipolabs.com/search"
         request = requests.get(url)
         request.raise_for_status()
         return request.json()
 
     @task()
-    def transform(data, existing_records):
-        import pandas as pd
+    def transform(data: List[Dict[str, Any]], existing_records: List[Tuple[str]]) -> pd.DataFrame:
         df = pd.DataFrame(data).drop(["web_pages", "domains"], axis=1)
         # Исключаем уже существующие записи
         df = df[~df[["name"]].apply(tuple, axis=1).isin(existing_records)]
@@ -82,7 +84,7 @@ def universities_data():
         return df
 
     @task()
-    def load(data):
+    def load(data: pd.DataFrame) -> NoReturn:
         if data.empty:
             logging.info("Нет новых записей для загрузки")
             return
