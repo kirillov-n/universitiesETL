@@ -1,7 +1,7 @@
 import pendulum
 import requests
 import logging
-from typing import List, Dict, Any, Tuple, NoReturn
+from typing import List, Dict, Any, Tuple
 
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
@@ -84,7 +84,7 @@ def universities_data():
         return df
 
     @task()
-    def load(data: pd.DataFrame) -> NoReturn:
+    def load(data: pd.DataFrame) -> None:
         if data.empty:
             logging.info("Нет новых записей для загрузки")
             return
