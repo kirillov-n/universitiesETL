@@ -13,7 +13,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
     catchup=False,
     tags=["universities"],
 )
-def universities_data():
+def universities_data() -> None:
     import pandas as pd
     
     @task()
