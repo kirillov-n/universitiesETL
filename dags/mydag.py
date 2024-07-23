@@ -14,10 +14,17 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
     tags=["universities"],
 )
 def universities_data() -> None:
+    """
+    Определяющая DAG функция
+    """
     import pandas as pd
     
     @task()
     def check_existing_records() -> List[Tuple[str]]:
+        """
+        Проверка на существующие записи в БД и создание таблицы, если не создана
+        :return: List[Tuple[str]] названия учебных заведений
+        """
         conn = PostgresHook(postgres_conn_id="postgres").get_conn()
         cursor = conn.cursor()
         # Проверяем наличие таблицы universities
@@ -45,6 +52,10 @@ def universities_data() -> None:
     
     @task()
     def extract() -> List[Dict[str, Any]]:
+        """
+        Получение данных по url
+        :return: данные об учебных заведениях в формате json 
+        """
         url = "http://universities.hipolabs.com/search"
         request = requests.get(url)
         request.raise_for_status()
@@ -52,6 +63,12 @@ def universities_data() -> None:
 
     @task()
     def transform(data: List[Dict[str, Any]], existing_records: List[Tuple[str]]) -> pd.DataFrame:
+        """
+        Обработка данных и создание нового поля "type" с типом учебного заведения: колледж, университет или институт.
+        :param data: сырые данные
+        :param existing_records: уже существующие записи в БД
+        :return: df (state_province, name, alpha_two_code, country, type)
+        """
         df = pd.DataFrame(data).drop(["web_pages", "domains"], axis=1)
         # Исключаем уже существующие записи
         df = df[~df[["name"]].apply(tuple, axis=1).isin(existing_records)]
@@ -59,7 +76,7 @@ def universities_data() -> None:
             return df
         df.rename(columns={"state-province": "state_province"})
         """
-        Ищем заведения с ключевыми словами в названии для определения типа заведения: Колледж, университет или институт
+        Ищем заведения с ключевыми словами в названии для определения типа заведения: колледж, университет или институт
         Поиск по ключевым словам ведется на 4 самых популярных языках
         """
         # На английском языке
@@ -85,6 +102,10 @@ def universities_data() -> None:
 
     @task()
     def load(data: pd.DataFrame) -> None:
+        """
+        Загрузка данных в БД PostgreSQL
+        :param data: результирующий df
+        """
         if data.empty:
             logging.info("Нет новых записей для загрузки")
             return
